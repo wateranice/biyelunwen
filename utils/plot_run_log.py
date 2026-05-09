@@ -6,7 +6,9 @@
 - 各客户端系数随通信轮次的 **折线轨迹图**（演化轨迹）
 
 用法::
-    python utils/plot_run_log.py weights/adaptive/cifar10_dirichlet_run_log.npz
+    python utils/plot_run_log.py weights/ch4/e4_weight_vis_cifar10_dirichlet_run_log.npz --out experiments/outputs/e4_weight_vis
+
+另会输出各轮 ``sum_k beta_k`` 折线图（``*_beta_sum_per_round.png``），便于与 ``shrink_sum`` 对照。
 """
 from __future__ import annotations
 
@@ -68,6 +70,20 @@ def plot_npz(npz_path: Path, out_dir: Path | None = None) -> None:
         plt.savefig(p1c, dpi=200)
         plt.close()
 
+    # 各轮客户端系数之和（等于 shrink_sum 时常为水平线，便于论文说明收缩设定）
+    if betas.ndim == 2 and betas.shape[0] == len(acc):
+        beta_sum = np.asarray(betas.sum(axis=1), dtype=np.float64)
+        plt.figure(figsize=(8, 3))
+        plt.plot(rounds, beta_sum, "k-", linewidth=1.8)
+        plt.xlabel("Communication round")
+        plt.ylabel(r"$\sum_k \beta_k$ (sum of client coeffs.)")
+        plt.grid(True, alpha=0.3)
+        plt.title(f"Sum of aggregation client coefficients — {stem}")
+        plt.tight_layout()
+        p_sum = out_dir / f"{stem}_beta_sum_per_round.png"
+        plt.savefig(p_sum, dpi=200)
+        plt.close()
+
     plt.figure(figsize=(10, 4))
     plt.imshow(betas.T, aspect="auto", cmap="viridis", interpolation="nearest")
     plt.colorbar(label=r"$\beta_k$ (client coeff.)")
@@ -109,6 +125,8 @@ def plot_npz(npz_path: Path, out_dir: Path | None = None) -> None:
     if "proxy_loss" in data.files:
         saved.append(str(out_dir / f"{stem}_proxy_loss_from_log.png"))
     saved.extend([str(p2), str(p3)])
+    if betas.ndim == 2 and betas.shape[0] == len(acc):
+        saved.append(str(out_dir / f"{stem}_beta_sum_per_round.png"))
     print("Saved:\n  " + "\n  ".join(saved))
 
 

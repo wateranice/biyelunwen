@@ -1,0 +1,34 @@
+# E4-6：聚合权重可视化（与 ch4_compare 超参一致，仅权重文件名独立，避免覆盖主训练权重）
+# 一键训练并出图：
+#   python main.py configs/ch4_weight_vis.yaml --plot-after
+# 若已跑过 main，仅补图：
+#   python utils/plot_run_log.py weights/ch4/e4_weight_vis_cifar10_dirichlet_run_log.npz --out experiments/outputs/e4_weight_vis
+
+experiment:
+  seed: 42
+  data_root: ./data
+  dataset: cifar10
+  eval_batch_size: 256
+
+server:
+  device: auto
+  global_rounds: 30
+  lam: 0.1
+  aggregation_weight_lr: 0.01
+  shrink_sum: 1.0
+  proxy_batch_size: 64
+
+client:
+  num_clients: 10
+  batch_size: 128
+  local_epochs: 2
+  learning_rate: 0.01
+  momentum: 0.9
+  dirichlet_beta: 0.5
+  partition: dirichlet
+  proxy_ratio: 0.04
+  proxy_disjoint_from_clients: true
+  fedprox_mu: 0.01
+
+output:
+  model_path: weights/ch4/e4_weight_vis_cifar10_dirichlet.pth

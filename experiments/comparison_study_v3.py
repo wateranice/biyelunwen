@@ -78,7 +78,7 @@ def run_experiment(method='fedavg'):
         # 服务端聚合
         if method == 'adaptive':
             # 你的创新算法：基于代理数据的自适应加权
-            global_model, _ = adaptive_aggregate(global_model, client_models, proxy_ds, device)
+            global_model, _, _ = adaptive_aggregate(global_model, client_models, proxy_ds, device)
         else:
             # FedAvg 和 FedProx 默认使用简单权重平均
             global_model = fed_avg_aggregate(global_model, client_models)

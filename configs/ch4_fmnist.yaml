@@ -1,0 +1,31 @@
+# E4-3：Fashion-MNIST 三方法对比（任务书多数据集）
+# 使用：python experiments/comparison_aligned.py configs/ch4_fmnist.yaml --betas 0.05 0.1 0.5 1.0 --thresholds 50,55,60
+
+experiment:
+  seed: 42
+  data_root: ./data
+  dataset: fmnist
+  eval_batch_size: 256
+
+server:
+  device: auto
+  global_rounds: 30
+  lam: 0.1
+  aggregation_weight_lr: 0.01
+  shrink_sum: 1.0
+  proxy_batch_size: 64
+
+client:
+  num_clients: 10
+  batch_size: 128
+  local_epochs: 2
+  learning_rate: 0.01
+  momentum: 0.9
+  dirichlet_beta: 0.5
+  partition: dirichlet
+  proxy_ratio: 0.04
+  proxy_disjoint_from_clients: true
+  fedprox_mu: 0.01
+
+output:
+  model_path: weights/ch4/adaptive_fmnist_dirichlet.pth

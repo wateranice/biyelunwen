@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
@@ -68,6 +69,8 @@ class FederatedLearningSystem:
         )
 
         acc_round_history: list[float] = []
+        loss_round_history: list[float] = []
+        proxy_loss_round_history: list[float] = []
         beta_round_history: list[np.ndarray] = []
 
         for r in range(cfg.global_rounds):
@@ -80,6 +83,7 @@ class FederatedLearningSystem:
                     Subset(train_dataset, local_indices),
                     batch_size=cfg.batch_size,
                     shuffle=True,
+                    drop_last=True,
                 )
                 client = ClientAdaptiveWeighted(
                     client_id=i,
@@ -96,7 +100,7 @@ class FederatedLearningSystem:
                     print("")
 
             print("\nServer: Performing Adaptive Weighting Aggregation...")
-            global_model, _current_weights = adaptive_aggregate(
+            global_model, _current_weights, proxy_meta_loss = adaptive_aggregate(
                 global_model,
                 client_models,
                 proxy_data,
@@ -105,21 +109,31 @@ class FederatedLearningSystem:
                 learnable_server=learnable_server,
             )
             beta_round_history.append(_current_weights.detach().cpu().numpy())
+            proxy_loss_round_history.append(float(proxy_meta_loss))
 
             global_model.eval()
+            ce_fn = nn.CrossEntropyLoss(reduction="sum")
+            loss_total = 0.0
             correct = 0
             total = 0
             with torch.no_grad():
                 for images, labels in test_loader:
                     images, labels = images.to(device), labels.to(device)
                     outputs = global_model(images)
+                    loss_total += ce_fn(outputs, labels).item()
                     _, predicted = torch.max(outputs.data, 1)
                     total += labels.size(0)
                     correct += (predicted == labels).sum().item()
 
             accuracy = 100 * correct / total
+            mean_test_ce = loss_total / max(total, 1)
             acc_round_history.append(accuracy)
-            print(f"Round {r + 1} Result -> Global Test Accuracy: {accuracy:.2f}%")
+            loss_round_history.append(mean_test_ce)
+            print(
+                f"Round {r + 1} Result -> Global Test Accuracy: {accuracy:.2f}% | "
+                f"Test loss (mean CE): {mean_test_ce:.4f} | "
+                f"Proxy meta-loss: {proxy_meta_loss:.4f}"
+            )
 
         print("\nSuccess: Federated training completed.")
 
@@ -134,6 +148,10 @@ class FederatedLearningSystem:
         np.savez_compressed(
             str(log_npz),
             accuracy=np.asarray(acc_round_history, dtype=np.float32),
+            test_loss=np.asarray(loss_round_history, dtype=np.float32),
+            proxy_loss=np.asarray(proxy_loss_round_history, dtype=np.float32),
             client_betas=np.stack(beta_round_history, axis=0).astype(np.float32),
         )
-        print(f"Success: 每轮测试精度与客户端聚合系数已保存至 {log_npz}")
+        print(
+            f"Success: 每轮测试精度、测试集平均交叉熵、代理集 meta-loss 与客户端聚合系数已保存至 {log_npz}"
+        )

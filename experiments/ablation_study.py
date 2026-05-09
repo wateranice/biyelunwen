@@ -45,7 +45,7 @@ def run_ablation(p_size):
             client_models.append(local_model)
 
         # 聚合
-        model, _ = adaptive_aggregate(model, client_models, p_data, device)
+        model, _, _ = adaptive_aggregate(model, client_models, p_data, device)
 
         # 测试
         model.eval()

@@ -9,9 +9,11 @@
     python experiments/comparison_aligned.py configs/default.yaml --betas 0.1 0.5 1.0
 
 第 4 章数据产物（每个 β）::
-    - ``experiments/outputs/comparison_acc_beta{β}_....png``  三曲线图
-    - ``experiments/outputs/comparison_acc_beta{β}_....npz`` 各方法逐轮 Acc
-    - ``experiments/outputs/ch4_comparison_summary.csv``     全 β 汇总：末轮 Acc、达阈值轮次
+    - ``experiments/outputs/comparison_acc_beta{β}_....png``   三方法测试准确率曲线
+    - ``experiments/outputs/comparison_loss_beta{β}_....png``  三方法测试集平均交叉熵（任务书 Loss–轮次）
+    - ``experiments/outputs/comparison_proxy_loss_beta{β}_....png``  代理集 meta-loss（Adaptive 有效，其余为 nan）
+    - ``experiments/outputs/comparison_acc_beta{β}_....npz``   含 ``acc_*``、``test_loss_*``、``proxy_loss_*``
+    - ``experiments/outputs/ch4_comparison_summary.csv``      全 β 汇总：末轮 Acc、达阈值轮次
 """
 from __future__ import annotations
 
@@ -54,17 +56,25 @@ def _first_round_reaching(acc_hist: List[float], threshold_pct: float) -> Option
     return None
 
 
-def _evaluate(model: nn.Module, test_loader: DataLoader, device: torch.device) -> float:
+def _evaluate_acc_and_mean_test_loss(
+    model: nn.Module, test_loader: DataLoader, device: torch.device
+) -> tuple[float, float]:
+    """返回 (Top-1 准确率%, 测试集样本平均交叉熵 nat)。后者对应任务书「Loss vs. 通信轮次」。"""
     model.eval()
+    ce_fn = nn.CrossEntropyLoss(reduction="sum")
+    loss_total = 0.0
     correct = 0
-    total = 0
+    n = 0
     with torch.no_grad():
         for images, labels in test_loader:
             images, labels = images.to(device), labels.to(device)
-            _, pred = torch.max(model(images), 1)
-            total += labels.size(0)
+            logits = model(images)
+            loss_total += ce_fn(logits, labels).item()
+            n += labels.size(0)
+            _, pred = torch.max(logits, 1)
             correct += (pred == labels).sum().item()
-    return 100.0 * correct / total
+    mean_ce = loss_total / max(n, 1)
+    return 100.0 * correct / n, mean_ce
 
 
 def _local_train_fedavg_like(
@@ -128,7 +138,7 @@ def run_method(
     client_id_map: List[List[int]],
     device: torch.device,
     init_state: Dict[str, torch.Tensor],
-) -> List[float]:
+) -> tuple[list[float], list[float], list[float]]:
     set_seed(cfg.seed)
     global_model = create_model(cfg.dataset).to(device)
     global_model.load_state_dict(copy.deepcopy(init_state))
@@ -146,6 +156,8 @@ def run_method(
         )
 
     acc_hist: List[float] = []
+    loss_hist: List[float] = []
+    proxy_hist: List[float] = []
     for r in range(cfg.global_rounds):
         client_models: List[nn.Module] = []
         for i in range(cfg.num_clients):
@@ -153,6 +165,7 @@ def run_method(
                 Subset(train_ds, client_id_map[i]),
                 batch_size=cfg.batch_size,
                 shuffle=True,
+                drop_last=True,
             )
             if method == "fedprox":
                 local_m = _local_train_fedprox(
@@ -176,7 +189,7 @@ def run_method(
             client_models.append(local_m)
 
         if method == "adaptive":
-            global_model, _ = adaptive_aggregate(
+            global_model, _, proxy_l = adaptive_aggregate(
                 global_model,
                 client_models,
                 proxy_ds,
@@ -184,13 +197,21 @@ def run_method(
                 lam=cfg.lam,
                 learnable_server=learnable,
             )
+            proxy_hist.append(float(proxy_l))
         else:
             global_model = fed_avg_aggregate(global_model, client_models)
+            proxy_hist.append(float("nan"))
 
-        acc_hist.append(_evaluate(global_model, test_loader, device))
-        print(f"  [{method}] round {r + 1}/{cfg.global_rounds}  test_acc={acc_hist[-1]:.2f}%")
+        acc_v, loss_v = _evaluate_acc_and_mean_test_loss(global_model, test_loader, device)
+        acc_hist.append(acc_v)
+        loss_hist.append(loss_v)
+        pl_str = f"{proxy_hist[-1]:.4f}" if method == "adaptive" else "nan"
+        print(
+            f"  [{method}] round {r + 1}/{cfg.global_rounds}  "
+            f"test_acc={acc_v:.2f}%  test_loss(mean CE)={loss_v:.4f}  proxy_meta_loss={pl_str}"
+        )
 
-    return acc_hist
+    return acc_hist, loss_hist, proxy_hist
 
 
 def main() -> None:
@@ -269,10 +290,12 @@ def main() -> None:
         init_state = copy.deepcopy(ref.state_dict())
         del ref
 
-        series: Dict[str, List[float]] = {}
+        series_acc: Dict[str, List[float]] = {}
+        series_loss: Dict[str, List[float]] = {}
+        series_proxy: Dict[str, List[float]] = {}
         for m in args.methods:
             print(f"\n=== Running {m} (beta={cfg.dirichlet_beta}) ===")
-            series[m] = run_method(
+            acc_h, loss_h, proxy_h = run_method(
                 cfg,
                 m,
                 train_ds,
@@ -282,20 +305,26 @@ def main() -> None:
                 device,
                 init_state,
             )
+            series_acc[m] = acc_h
+            series_loss[m] = loss_h
+            series_proxy[m] = proxy_h
 
         out_dir = _PROJECT_ROOT / "experiments" / "outputs"
         out_dir.mkdir(parents=True, exist_ok=True)
         beta_tag = str(cfg.dirichlet_beta).replace(".", "p")
         fig_path = out_dir / f"comparison_acc_beta{beta_tag}_{cfg.dataset}_{cfg.partition}.png"
+        fig_loss = out_dir / f"comparison_loss_beta{beta_tag}_{cfg.dataset}_{cfg.partition}.png"
+        fig_proxy = out_dir / f"comparison_proxy_loss_beta{beta_tag}_{cfg.dataset}_{cfg.partition}.png"
 
-        rounds = range(1, len(next(iter(series.values()))) + 1)
+        n_rounds = len(next(iter(series_acc.values())))
+        rounds = range(1, n_rounds + 1)
         plt.figure(figsize=(9, 5))
         styles = {
             "fedavg": ("g--", "FedAvg"),
             "fedprox": ("r-.", "FedProx"),
             "adaptive": ("b-", "Adaptive (learnable)"),
         }
-        for m, acc in series.items():
+        for m, acc in series_acc.items():
             sty, lbl = styles[m]
             plt.plot(list(rounds), acc, sty, label=lbl, linewidth=2 if m == "adaptive" else 1.5)
         plt.xlabel("Communication round")
@@ -310,17 +339,56 @@ def main() -> None:
         plt.close()
         print(f"\nSaved figure: {fig_path}")
 
+        plt.figure(figsize=(9, 5))
+        for m, loss_v in series_loss.items():
+            sty, lbl = styles[m]
+            plt.plot(list(rounds), loss_v, sty, label=lbl, linewidth=2 if m == "adaptive" else 1.5)
+        plt.xlabel("Communication round")
+        plt.ylabel("Test loss (mean cross-entropy, nats)")
+        plt.title(
+            f"Test loss vs round | {cfg.dataset} | {cfg.partition} | beta={cfg.dirichlet_beta}"
+        )
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(fig_loss, dpi=200)
+        plt.close()
+        print(f"Saved figure: {fig_loss}")
+
+        plt.figure(figsize=(9, 5))
+        for m, pv in series_proxy.items():
+            arr = np.asarray(pv, dtype=np.float64)
+            if np.all(np.isnan(arr)):
+                continue
+            sty, lbl = styles[m]
+            plt.plot(list(rounds), arr, sty, label=lbl, linewidth=2 if m == "adaptive" else 1.5)
+        plt.xlabel("Communication round")
+        plt.ylabel("Proxy meta-loss (mean CE on proxy, nats)")
+        plt.title(
+            f"Proxy set loss vs round | {cfg.dataset} | {cfg.partition} | beta={cfg.dirichlet_beta}"
+        )
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(fig_proxy, dpi=200)
+        plt.close()
+        print(f"Saved figure: {fig_proxy}")
+
         npz_path = fig_path.with_suffix(".npz")
         save_dict: Dict[str, object] = {
             "dirichlet_beta": np.float32(cfg.dirichlet_beta),
-            "rounds": np.arange(1, len(next(iter(series.values()))) + 1, dtype=np.int32),
+            "rounds": np.arange(1, n_rounds + 1, dtype=np.int32),
         }
-        for m_name, acc in series.items():
+        for m_name, acc in series_acc.items():
             save_dict[f"acc_{m_name}"] = np.asarray(acc, dtype=np.float32)
+        for m_name, loss_v in series_loss.items():
+            save_dict[f"test_loss_{m_name}"] = np.asarray(loss_v, dtype=np.float32)
+        for m_name, pv in series_proxy.items():
+            save_dict[f"proxy_loss_{m_name}"] = np.asarray(pv, dtype=np.float32)
         np.savez_compressed(str(npz_path), **save_dict)
         print(f"Saved curves: {npz_path}")
 
-        for m_name, acc in series.items():
+        for m_name, acc in series_acc.items():
             row: Dict[str, object] = {
                 "dataset": cfg.dataset,
                 "dirichlet_beta": cfg.dirichlet_beta,

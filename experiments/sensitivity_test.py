@@ -70,7 +70,7 @@ def run_specific_experiment(beta, algo='adaptive'):
             global_model = fed_avg_aggregate(global_model, client_models)
         elif algo == 'adaptive':
             # 自适应加权聚合
-            global_model, _ = adaptive_aggregate(global_model, client_models, proxy, device)
+            global_model, _, _ = adaptive_aggregate(global_model, client_models, proxy, device)
 
     # 4. 评估最终模型在测试集上的准确率
     global_model.eval()

@@ -58,7 +58,7 @@ def run_experiment(method='adaptive'):
 
         # 服务器聚合
         if method == 'adaptive':
-            global_model, _ = adaptive_aggregate(global_model, client_models, proxy_ds, device)
+            global_model, _, _ = adaptive_aggregate(global_model, client_models, proxy_ds, device)
         else:
             global_model = fed_avg_aggregate(global_model, client_models)
 

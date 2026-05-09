@@ -86,7 +86,7 @@ class ServerLearnableAggregator(ServerBaseFL):
         global_model: nn.Module,
         client_models: List[nn.Module],
         proxy_data: Any,
-    ) -> Tuple[nn.Module, torch.Tensor]:
+    ) -> Tuple[nn.Module, torch.Tensor, float]:
         K = len(client_models)
         if K != self.num_clients:
             raise ValueError(f"客户端数 {K} 与服务器初始化 {self.num_clients} 不一致")
@@ -124,6 +124,8 @@ class ServerLearnableAggregator(ServerBaseFL):
             raise RuntimeError("代理数据集为空，无法更新聚合权重")
 
         loss = total_loss / n_batches
+        # 论文「代理集损失」：混合参数在代理集上的 batch 平均交叉熵（SGD 步前）
+        proxy_loss_meta = float(loss.detach().cpu())
         loss.backward()
         self.optimizer.step()
 
@@ -152,4 +154,4 @@ class ServerLearnableAggregator(ServerBaseFL):
             p.requires_grad_(True)
 
         # 返回各客户端实际分到的质量 beta（和为 shrink_sum），便于日志与论文作图
-        return global_model, beta.detach()
+        return global_model, beta.detach(), proxy_loss_meta

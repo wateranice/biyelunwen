@@ -1,5 +1,9 @@
 """
-从 ``fl_system`` 保存的 ``*_run_log.npz`` 绘制测试精度曲线与各客户端聚合系数热力图。
+从 ``fl_system`` 保存的 ``*_run_log.npz`` 绘制：
+
+- 测试精度、测试 Loss、代理 meta-loss（若字段存在）
+- 各客户端聚合系数 **热力图**
+- 各客户端系数随通信轮次的 **折线轨迹图**（演化轨迹）
 
 用法::
     python utils/plot_run_log.py weights/adaptive/cifar10_dirichlet_run_log.npz
@@ -38,6 +42,32 @@ def plot_npz(npz_path: Path, out_dir: Path | None = None) -> None:
     plt.savefig(p1, dpi=200)
     plt.close()
 
+    if "test_loss" in data.files:
+        tl = data["test_loss"]
+        plt.figure(figsize=(8, 4))
+        plt.plot(rounds, tl, "r-", linewidth=2)
+        plt.xlabel("Communication round")
+        plt.ylabel("Test loss (mean cross-entropy, nats)")
+        plt.grid(True, alpha=0.3)
+        plt.title(f"Test loss vs round — {stem}")
+        plt.tight_layout()
+        p1b = out_dir / f"{stem}_test_loss_from_log.png"
+        plt.savefig(p1b, dpi=200)
+        plt.close()
+
+    if "proxy_loss" in data.files:
+        pl = data["proxy_loss"]
+        plt.figure(figsize=(8, 4))
+        plt.plot(rounds, pl, "m-", linewidth=2)
+        plt.xlabel("Communication round")
+        plt.ylabel("Proxy meta-loss (nats)")
+        plt.grid(True, alpha=0.3)
+        plt.title(f"Proxy set meta-loss vs round — {stem}")
+        plt.tight_layout()
+        p1c = out_dir / f"{stem}_proxy_loss_from_log.png"
+        plt.savefig(p1c, dpi=200)
+        plt.close()
+
     plt.figure(figsize=(10, 4))
     plt.imshow(betas.T, aspect="auto", cmap="viridis", interpolation="nearest")
     plt.colorbar(label=r"$\beta_k$ (client coeff.)")
@@ -48,7 +78,38 @@ def plot_npz(npz_path: Path, out_dir: Path | None = None) -> None:
     p2 = out_dir / f"{stem}_betas_heatmap.png"
     plt.savefig(p2, dpi=200)
     plt.close()
-    print(f"Saved: {p1}\nSaved: {p2}")
+
+    # 聚合权重演化轨迹：每客户端一条曲线（betas: shape [n_rounds, n_clients]）
+    n_r, n_c = betas.shape[0], betas.shape[1]
+    plt.figure(figsize=(9, 5))
+    cmap = plt.get_cmap("tab10")
+    for k in range(n_c):
+        plt.plot(
+            rounds[:n_r],
+            betas[:, k],
+            color=cmap(k % 10),
+            linewidth=1.5,
+            alpha=0.85,
+            label=f"Client {k}",
+        )
+    plt.xlabel("Communication round")
+    plt.ylabel(r"Client coefficient $\beta_k$ (after softmax $\times$ shrink)")
+    plt.grid(True, alpha=0.3)
+    plt.title(f"Aggregation weight trajectory — {stem}")
+    ncol = 5 if n_c <= 10 else 6
+    plt.legend(ncol=ncol, fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.18))
+    plt.tight_layout()
+    p3 = out_dir / f"{stem}_betas_trajectory.png"
+    plt.savefig(p3, dpi=200, bbox_inches="tight")
+    plt.close()
+
+    saved: list[str] = [str(p1)]
+    if "test_loss" in data.files:
+        saved.append(str(out_dir / f"{stem}_test_loss_from_log.png"))
+    if "proxy_loss" in data.files:
+        saved.append(str(out_dir / f"{stem}_proxy_loss_from_log.png"))
+    saved.extend([str(p2), str(p3)])
+    print("Saved:\n  " + "\n  ".join(saved))
 
 
 def main() -> None:

@@ -52,7 +52,7 @@ def _heuristic_aggregate(
     proxy_data,
     device: torch.device,
     lam: float = 0.1,
-) -> Tuple[nn.Module, torch.Tensor]:
+) -> Tuple[nn.Module, torch.Tensor, float]:
     """原「loss → softmax + 控制变量」启发式（learnable_server 未传入时使用）。"""
     global_model.eval()
     K = len(client_models)
@@ -94,7 +94,9 @@ def _heuristic_aggregate(
         global_dict[name] = aggregated_param
 
     global_model.load_state_dict(global_dict)
-    return global_model, final_alpha
+    # 各客户端在代理集上平均 CE 的算术平均，仅作日志尺度（与可学习路径的 meta-loss 不同）
+    heuristic_proxy_scalar = float(loss_tensor.mean().detach().cpu())
+    return global_model, final_alpha, heuristic_proxy_scalar
 
 
 def adaptive_aggregate(
@@ -104,12 +106,15 @@ def adaptive_aggregate(
     device: torch.device,
     lam: float = 0.1,
     learnable_server: Optional[ServerLearnableAggregator] = None,
-) -> Tuple[nn.Module, torch.Tensor]:
+) -> Tuple[nn.Module, torch.Tensor, float]:
     """
     聚合入口。
 
     - 若传入 ``learnable_server``：在代理集上对服务器 ``weight_logits`` 做梯度下降并凸组合写回全局模型。
     - 若为 ``None``：使用原启发式聚合（兼容 experiments 等旧调用）。
+
+    返回值第三项为 **代理集相关标量损失**（可学习路径：混合参数在代理集上的 batch 平均 CE；
+    启发式路径：各客户端代理集平均 CE 的算术平均），供 ``fl_system`` / 论文曲线记录。
     """
     if learnable_server is not None:
         return learnable_server.aggregate_round(global_model, client_models, proxy_data)

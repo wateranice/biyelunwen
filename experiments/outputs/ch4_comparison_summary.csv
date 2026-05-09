@@ -1,0 +1,10 @@
+﻿dirichlet_beta,partition,method,final_test_acc_pct,global_rounds,first_round_acc_ge_50,first_round_acc_ge_55,first_round_acc_ge_60
+0.1,dirichlet,fedavg,40.13,6,,,
+0.1,dirichlet,fedprox,39.09,6,,,
+0.1,dirichlet,adaptive,40.84,6,,,
+0.5,dirichlet,fedavg,49.64,6,,,
+0.5,dirichlet,fedprox,49.67,6,,,
+0.5,dirichlet,adaptive,49.72,6,,,
+1.0,dirichlet,fedavg,51.93,6,6,,
+1.0,dirichlet,fedprox,51.39,6,6,,
+1.0,dirichlet,adaptive,52.08,6,6,,

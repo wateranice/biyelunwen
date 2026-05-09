@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# 数据与权重（体积大，用 README 说明在服务器/本机下载）
+data/
+weights/**/*.pth
+weights/**/*.npz
+code/*.zip
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# 环境变量与密钥
+.env
+*.pem

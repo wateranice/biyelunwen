@@ -1,0 +1,48 @@
+# 联邦学习默认实验配置
+# ------------------------------------------------------------------
+# 切换数据与划分时，一般只需改本文件（及 output.model_path 避免覆盖权重）：
+#   experiment.dataset: cifar10 | mnist | fmnist
+#   client.partition:   dirichlet | pathological
+#   pathological 为按类别互斥分配；建议 num_clients <= 10（与类别数一致时每客户端一类）
+# ------------------------------------------------------------------
+
+experiment:
+  seed: 42
+  data_root: ./data
+  dataset: cifar10
+  # 全局测试集 DataLoader 的 batch；省略本项时与 client.batch_size 相同。可单独调大以加快每轮评测。
+  eval_batch_size: 256
+
+server:
+  # 已安装 torch 2.6.0+cu124 时可使用 cuda；若换环境只有 CPU 版请改回 auto
+  device: cuda
+  global_rounds: 30
+  lam: 0.1
+  # 服务端聚合权重 logits 的学习率（参考 FedAPA server 对 client_weights 的 SGD）
+  aggregation_weight_lr: 0.01
+  # 任务书「系数和<1 / 收缩」：各客户端凸组合系数之和为 shrink_sum，其余 (1-shrink_sum) 保留本轮全局参数。
+  # 1.0 等价于原先仅客户端凸组合；论文对比可试 0.85～0.95。
+  shrink_sum: 1.0
+  # 服务端在代理集上更新聚合权重时的 batch（与客户端本地训练 batch 独立）。
+  proxy_batch_size: 64
+
+client:
+  num_clients: 10
+  batch_size: 128
+  local_epochs: 2
+  learning_rate: 0.01
+  momentum: 0.9
+  # dirichlet 划分时使用；pathological 时可保留不改
+  dirichlet_beta: 0.5
+  # dirichlet | pathological（病态：按类别互斥划分到各客户端）
+  partition: dirichlet
+  # 服务端代理数据占训练集比例，建议 0.01～0.05（1%～5%）
+  proxy_ratio: 0.04
+  # true：代理样本与所有客户端本地索引集合互斥（论文推荐）；false 为旧行为
+  proxy_disjoint_from_clients: true
+  # experiments/comparison_aligned.py 跑 FedProx 时的近端系数
+  fedprox_mu: 0.01
+
+output:
+  # 权重保存在 weights/<算法>/ 下，与代码包 models/ 分开；换实验请改文件名避免覆盖
+  model_path: weights/adaptive/cifar10_dirichlet.pth

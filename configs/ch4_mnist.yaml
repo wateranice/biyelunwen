@@ -28,4 +28,8 @@ client:
   fedprox_mu: 0.01
 
 output:
+  # 对比实验主要读 yaml；此权重路径供单独跑 main.py 时用
   model_path: weights/ch4/adaptive_mnist_dirichlet.pth
+
+# 跑完 comparison_aligned 后汇总表为：
+# experiments/outputs/ch4_comparison_summary_mnist_dirichlet.csv

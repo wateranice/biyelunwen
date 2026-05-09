@@ -35,4 +35,4 @@ else
   echo "========== 3/3 已跳过（SKIP_ABLATION=1） =========="
 fi
 
-echo "Done. 查看 experiments/outputs/ch4_comparison_summary.csv 与 weights/ 下产物。"
+echo "Done. 查看 experiments/outputs/ch4_comparison_summary_*_*.csv 与 weights/ 下产物。"

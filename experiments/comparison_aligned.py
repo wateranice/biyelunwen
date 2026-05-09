@@ -13,7 +13,7 @@
     - ``experiments/outputs/comparison_loss_beta{β}_....png``  三方法测试集平均交叉熵（任务书 Loss–轮次）
     - ``experiments/outputs/comparison_proxy_loss_beta{β}_....png``  代理集 meta-loss（Adaptive 有效，其余为 nan）
     - ``experiments/outputs/comparison_acc_beta{β}_....npz``   含 ``acc_*``、``test_loss_*``、``proxy_loss_*``
-    - ``experiments/outputs/ch4_comparison_summary.csv``      全 β 汇总：末轮 Acc、达阈值轮次
+    - ``experiments/outputs/ch4_comparison_summary_{dataset}_{partition}.csv``  全 β 汇总（按数据集/划分命名，避免覆盖）
 """
 from __future__ import annotations
 
@@ -405,7 +405,10 @@ def main() -> None:
 
     out_dir = _PROJECT_ROOT / "experiments" / "outputs"
     out_dir.mkdir(parents=True, exist_ok=True)
-    summary_csv = out_dir / "ch4_comparison_summary.csv"
+    # 与 CIFAR / MNIST 等分文件，避免同一 outputs 目录下后跑实验覆盖先跑的汇总表
+    summary_csv = out_dir / (
+        f"ch4_comparison_summary_{cfg.dataset}_{cfg.partition}.csv"
+    )
     if summary_rows:
         fieldnames = list(summary_rows[0].keys())
         with summary_csv.open("w", newline="", encoding="utf-8-sig") as f:

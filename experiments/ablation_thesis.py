@@ -7,8 +7,11 @@
     # 默认使用 configs/ch4_compare.yaml，跑完全部预设（耗时长）
     python experiments/ablation_thesis.py
 
-    # 指定配置
+    # 指定配置（CIFAR-10）
     python experiments/ablation_thesis.py configs/ch4_compare.yaml
+
+    # 更快试跑 / 预实验：改用 Fashion-MNIST（数据与模型更小，单轮更快）
+    python experiments/ablation_thesis.py configs/ch4_fmnist.yaml
 
     # 只跑其中几组（逗号分隔标签）
     python experiments/ablation_thesis.py configs/ch4_compare.yaml --only baseline,proxy_001,shrink_090

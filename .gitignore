@@ -10,6 +10,24 @@ venv/
 dist/
 build/
 
+# 本机从服务器 scp 的实验产物（保留目录与说明文件）
+experiments/outputs_quanzhong/*
+!experiments/outputs_quanzhong/.gitkeep
+!experiments/outputs_quanzhong/README_下载说明.txt
+
+experiments/outputs_48425/*
+!experiments/outputs_48425/.gitkeep
+!experiments/outputs_48425/README_下载说明.txt
+
+# 本机从服务器整包下载的对比/消融结果（体积大）
+experiments/download_results/
+experiments/outputs_server/
+experiments/outputs_server_25477/
+experiments/outputs_server_autodl/
+
+# 划分可视化大图（可选：需要时单独拷，不默认进库）
+experiments/outputs/partition_*.png
+
 # 数据与权重（体积大，用 README 说明在服务器/本机下载）
 data/
 weights/**/*.pth

@@ -46,3 +46,8 @@ client:
 output:
   # 权重保存在 weights/<算法>/ 下，与代码包 models/ 分开；换实验请改文件名避免覆盖
   model_path: weights/adaptive/cifar10_dirichlet.pth
+
+# experiments/comparison_aligned.py：未传命令行 --betas 且 client.partition=dirichlet 时，
+# 依次对下列 β 跑 FedAvg / FedProx / Adaptive 对齐对比；每个 β 输出 acc、loss、proxy_loss 图及含 test_loss_* 的 npz。
+comparison_aligned:
+  dirichlet_betas: [0.05, 0.1, 0.5, 1.0]

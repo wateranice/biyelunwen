@@ -5,6 +5,9 @@
 
 用法（在项目根目录）::
     python experiments/comparison_aligned.py configs/default.yaml
+        # 若 ``configs/default.yaml`` 中 ``comparison_aligned.dirichlet_betas`` 已配置且
+        # ``client.partition`` 为 ``dirichlet``，则省略 ``--betas`` 时会依次跑完全组 β，
+        # 每个 β 均写出 acc / loss / proxy_loss 图与含 ``test_loss_*`` 的 ``.npz``。
     python experiments/comparison_aligned.py configs/default.yaml --methods fedavg adaptive
     python experiments/comparison_aligned.py configs/default.yaml --betas 0.1 0.5 1.0
 
@@ -26,6 +29,7 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
 import matplotlib.pyplot as plt
+import yaml
 import numpy as np
 import torch
 import torch.nn as nn
@@ -46,6 +50,21 @@ from utils.seeding import set_seed
 
 
 MethodName = Literal["fedavg", "fedprox", "adaptive"]
+
+
+def _dirichlet_betas_from_config_yaml(cfg_path: Path) -> Optional[List[float]]:
+    """partition=dirichlet 且 YAML 配置了 ``comparison_aligned.dirichlet_betas`` 时返回该列表，否则 None。"""
+    with cfg_path.open("r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+    cli = raw.get("client") or {}
+    if str(cli.get("partition", "dirichlet")).lower() != "dirichlet":
+        return None
+    block = raw.get("comparison_aligned") or {}
+    seq = block.get("dirichlet_betas")
+    if not seq:
+        return None
+    out = [float(x) for x in seq]
+    return out if out else None
 
 
 def _first_round_reaching(acc_hist: List[float], threshold_pct: float) -> Optional[int]:
@@ -234,7 +253,11 @@ def main() -> None:
         nargs="*",
         type=float,
         default=None,
-        help="若指定，则对每个 dirichlet_beta 各跑一轮完整对比并各存一图",
+        help=(
+            "列出要对每个 dirichlet_beta 跑的 β；若省略且 YAML 中 "
+            "comparison_aligned.dirichlet_betas 存在且 partition=dirichlet，则用该列表；"
+            "否则只跑 YAML 中单个 client.dirichlet_beta。"
+        ),
     )
     parser.add_argument(
         "--thresholds",
@@ -254,7 +277,16 @@ def main() -> None:
     if not cfg_path.is_absolute():
         cfg_path = _PROJECT_ROOT / cfg_path
 
-    betas = args.betas if args.betas else [None]
+    if args.betas is not None:
+        if len(args.betas) == 0:
+            parser.error(
+                "请为 --betas 提供至少一个数值，或完全省略 --betas 以使用 "
+                "YAML 中 comparison_aligned.dirichlet_betas（dirichlet 划分时）。"
+            )
+        betas = list(args.betas)
+    else:
+        yaml_betas = _dirichlet_betas_from_config_yaml(cfg_path)
+        betas = yaml_betas if yaml_betas is not None else [None]
     thr_list = [
         float(x.strip())
         for x in args.thresholds.split(",")
